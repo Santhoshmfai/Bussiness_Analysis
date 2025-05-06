@@ -1,5 +1,5 @@
 import express from "express";
-import { createProduct ,getAllProducts,placeOrder,getAllOrders,getProductSummary ,signup ,login ,addSameProduct} from "../controllers/ProductsControllers.js";
+import { createProduct ,getAllProducts,placeOrder,getAllOrders,getProductSummary ,signup ,login ,addSameProduct ,completeSifting} from "../controllers/ProductsControllers.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -17,4 +17,5 @@ router.get("/getAllOrders",verifyToken,  getAllOrders);
 
 router.get("/getSummary",verifyToken,  getProductSummary );
 
+router.post("/completeSifted",verifyToken,  completeSifting );
 export default router;

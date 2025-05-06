@@ -137,8 +137,8 @@ export const placeOrder = async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const buyer = await User.findById(decoded.id);
-    if (!buyer) {
+    const user = await User.findById(decoded.id);
+    if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
@@ -147,37 +147,38 @@ export const placeOrder = async (req, res) => {
       return res.status(400).json({ message: "Products array required." });
     }
 
-    let orderDoc = await Order.findOne({ buyerId: buyer._id });
+    let orderDoc = await Order.findOne({ userId: user._id });
 
     if (!orderDoc) {
       orderDoc = new Order({
-        buyerId: buyer._id,
-        buyerEmail: buyer.email,
+        userId: user._id,
+        userEmail: user.email,
         items: [],
         grandTotal: 0
       });
     }
 
+    // Verify all products belong to this user
+    const userProductDoc = await Product.findOne({ userId: user._id });
+    if (!userProductDoc) {
+      return res.status(404).json({ message: "No products found for this user." });
+    }
+
     for (const item of products) {
-      const { productId, quantity } = item;
+      const { productId, quantity, status = 'sifting' } = item;
 
       if (!productId || !quantity || quantity <= 0) {
         return res.status(400).json({ message: "Invalid product data." });
       }
 
-      const productDoc = await Product.findOne({ "products._id": productId });
-      if (!productDoc) {
-        return res.status(404).json({ message: `Product with ID ${productId} not found.` });
-      }
-
-      // Check if the product belongs to the buyer (email match)
-      if (productDoc.userEmail !== buyer.email) {
-        return res.status(403).json({ 
-          message: `You can only order products that you created. Product ${productId} belongs to another user.` 
+      // Check if product exists in user's products
+      const product = userProductDoc.products.id(productId);
+      if (!product) {
+        return res.status(404).json({ 
+          message: `Product with ID ${productId} not found in your inventory.` 
         });
       }
 
-      const product = productDoc.products.id(productId);
       if (product.productQuantity < quantity) {
         return res.status(400).json({
           message: `Not enough stock for ${product.productName}. Available: ${product.productQuantity}`
@@ -186,8 +187,7 @@ export const placeOrder = async (req, res) => {
 
       // Deduct stock
       product.productQuantity -= quantity;
-      await productDoc.save();
-
+      
       const existingItem = orderDoc.items.find(
         i => i.productId.toString() === productId
       );
@@ -195,18 +195,21 @@ export const placeOrder = async (req, res) => {
       if (existingItem) {
         existingItem.quantityOrdered += quantity;
         existingItem.totalPrice = existingItem.quantityOrdered * existingItem.productPrice;
+        existingItem.status = status;
       } else {
         orderDoc.items.push({
           productId: product._id,
           productName: product.productName,
-          sellerId: productDoc.userId,
-          sellerEmail: productDoc.userEmail,
           quantityOrdered: quantity,
           productPrice: product.productPrice,
-          totalPrice: quantity * product.productPrice
+          totalPrice: quantity * product.productPrice,
+          status: status
         });
       }
     }
+
+    // Save product quantity changes
+    await userProductDoc.save();
 
     orderDoc.grandTotal = orderDoc.items.reduce((sum, item) => sum + item.totalPrice, 0);
     const savedOrder = await orderDoc.save();
@@ -221,7 +224,6 @@ export const placeOrder = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
-
 export const getAllOrders = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -267,8 +269,10 @@ export const getProductSummary = async (req, res) => {
         products: [],
         totalProductsInStock: 0,
         totalProductsSold: 0,
+        totalProductsSifting: 0,
         totalActualPrice: 0,
         totalSalesValue: 0,
+        totalSiftingValue: 0,
         totalProfit: 0
       });
     }
@@ -276,34 +280,51 @@ export const getProductSummary = async (req, res) => {
     const orders = await Order.find({ "items.sellerId": user._id });
 
     const soldQuantities = {};
+    const siftingQuantities = {};
     const salesValues = {};
+    const siftingValues = {};
+
     orders.forEach(order => {
       order.items.forEach(item => {
         if (item.sellerId.toString() === user._id.toString()) {
           const productIdStr = item.productId.toString();
-          if (!soldQuantities[productIdStr]) {
-            soldQuantities[productIdStr] = 0;
-            salesValues[productIdStr] = 0;
+          
+          if (item.status === 'sifted') {
+            if (!soldQuantities[productIdStr]) {
+              soldQuantities[productIdStr] = 0;
+              salesValues[productIdStr] = 0;
+            }
+            soldQuantities[productIdStr] += item.quantityOrdered;
+            salesValues[productIdStr] += item.totalPrice;
+          } else if (item.status === 'sifting') {
+            if (!siftingQuantities[productIdStr]) {
+              siftingQuantities[productIdStr] = 0;
+              siftingValues[productIdStr] = 0;
+            }
+            siftingQuantities[productIdStr] += item.quantityOrdered;
+            siftingValues[productIdStr] += item.totalPrice;
           }
-          soldQuantities[productIdStr] += item.quantityOrdered;
-          salesValues[productIdStr] += item.totalPrice;
         }
       });
     });
 
     let totalActualPrice = 0;
     let totalSalesValue = 0;
+    let totalSiftingValue = 0;
     let totalProfit = 0;
 
     const productSummary = productDoc.products.map(product => {
       const productIdStr = product._id.toString();
       const sold = soldQuantities[productIdStr] || 0;
+      const sifting = siftingQuantities[productIdStr] || 0;
       const productSalesValue = salesValues[productIdStr] || 0;
+      const productSiftingValue = siftingValues[productIdStr] || 0;
       const productActualCost = product.actualPrice * sold;
       const productProfit = productSalesValue - productActualCost;
       
-      totalActualPrice += product.actualPrice * (product.productQuantity + sold);
+      totalActualPrice += product.actualPrice * (product.productQuantity + sold + sifting);
       totalSalesValue += productSalesValue;
+      totalSiftingValue += productSiftingValue;
       totalProfit += productProfit;
 
       return {
@@ -311,24 +332,29 @@ export const getProductSummary = async (req, res) => {
         productName: product.productName,
         inStock: product.productQuantity,
         sold: sold,
-        total: product.productQuantity + sold,
+        sifting: sifting,
+        total: product.productQuantity + sold + sifting,
         actualPrice: product.actualPrice,
         sellingPrice: product.productPrice,
-        totalActualCost: product.actualPrice * (product.productQuantity + sold),
+        totalActualCost: product.actualPrice * (product.productQuantity + sold + sifting),
         totalSalesValue: productSalesValue,
+        totalSiftingValue: productSiftingValue,
         profit: productProfit
       };
     });
 
     const totalProductsInStock = productSummary.reduce((sum, product) => sum + product.inStock, 0);
     const totalProductsSold = productSummary.reduce((sum, product) => sum + product.sold, 0);
+    const totalProductsSifting = productSummary.reduce((sum, product) => sum + product.sifting, 0);
 
     res.status(200).json({
       products: productSummary,
       totalProductsInStock,
       totalProductsSold,
+      totalProductsSifting,
       totalActualPrice,
       totalSalesValue,
+      totalSiftingValue,
       totalProfit
     });
 
@@ -389,3 +415,52 @@ export const addSameProduct = async (req, res) => {
     });
   }
 }
+export const completeSifting = async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized: No token provided." });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const { orderId, itemId } = req.body;
+
+    if (!orderId || !itemId) {
+      return res.status(400).json({ message: "Order ID and Item ID are required." });
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: user._id, // Ensure only the owner can modify their order
+      "items._id": itemId
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order or item not found for this user." });
+    }
+
+    const item = order.items.id(itemId);
+    if (item.status !== 'sifting') {
+      return res.status(400).json({ message: "Item is not in sifting status." });
+    }
+
+    item.status = 'sifted';
+    await order.save();
+
+    res.status(200).json({
+      message: "Sifting completed successfully",
+      order: order
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: error.message 
+    });
+  }
+};
