@@ -7,10 +7,14 @@ const router = express.Router();
 
 router.post("/signup", signup);
 router.post("/login", login);
+
 router.post("/CreateProducts",verifyToken, createProduct);
+router.post("/addSameProduct",verifyToken, addSameProduct);
 router.get("/GetAllProducts",verifyToken,  getAllProducts);
+
 router.post("/OrderItem",verifyToken,  placeOrder);
 router.get("/getAllOrders",verifyToken,  getAllOrders);
+
 router.get("/getSummary",verifyToken,  getProductSummary );
-router.post("/addSameProduct", addSameProduct);
+
 export default router;

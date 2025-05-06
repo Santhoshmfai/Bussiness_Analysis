@@ -71,17 +71,15 @@ export const createProduct = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const { productName, productPrice, productQuantity, type, itemType, category, productImage } = req.body;
+    const { productName, productPrice, actualPrice, productQuantity, type, itemType, category, productImage } = req.body;
 
-    if(!productName || !productPrice || !itemType || !category || !productImage || !type || !productQuantity) {
+    if(!productName || !productPrice || !actualPrice || !itemType || !category || !productImage || !type || !productQuantity) {
         return res.status(400).json({ message: "All product fields are required" });
     }
 
-    // Check if a product document already exists for this user
     let productDoc = await Product.findOne({ userId: user._id });
 
     if (!productDoc) {
-      // If no product document exists, create a new one
       productDoc = new Product({
         userId: user._id,
         userEmail: user.email,
@@ -89,10 +87,10 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Add the new product to the products array
     productDoc.products.push({
       productName,
       productPrice,
+      actualPrice,
       productQuantity,
       type,
       itemType,
@@ -106,7 +104,6 @@ export const createProduct = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 }
-
 export const getAllProducts = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -146,64 +143,26 @@ export const placeOrder = async (req, res) => {
     }
 
     const { products } = req.body;
-
     if (!products || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ message: "Invalid order request. Products array required." });
+      return res.status(400).json({ message: "Products array required." });
     }
 
-    let grandTotal = 0;
-    const orderItems = [];
-    
-    // Check for existing order of the same product
-    const existingOrder = await Order.findOne({ 
-      buyerId: buyer._id,
-      "items.productId": products[0].productId // assuming single product per order
-    });
+    let orderDoc = await Order.findOne({ buyerId: buyer._id });
 
-    if (existingOrder) {
-      // Update existing order
-      const existingItem = existingOrder.items.find(
-        item => item.productId.toString() === products[0].productId
-      );
-
-      const productDoc = await Product.findOne({ "products._id": products[0].productId });
-      if (!productDoc) {
-        return res.status(404).json({ message: `Product with ID ${products[0].productId} not found.` });
-      }
-
-      const product = productDoc.products.id(products[0].productId);
-      if (product.productQuantity < products[0].quantity) {
-        return res.status(400).json({ 
-          message: `Not enough stock available for ${product.productName}. Available: ${product.productQuantity}`
-        });
-      }
-
-      // Update quantity and totals
-      existingItem.quantityOrdered += products[0].quantity;
-      existingItem.totalPrice = existingItem.productPrice * existingItem.quantityOrdered;
-      
-      // Update product quantity
-      product.productQuantity -= products[0].quantity;
-      await productDoc.save();
-
-      // Recalculate grand total
-      existingOrder.grandTotal = existingOrder.items.reduce(
-        (total, item) => total + item.totalPrice, 0
-      );
-
-      const updatedOrder = await existingOrder.save();
-      return res.status(200).json({ 
-        message: "Order updated successfully", 
-        order: updatedOrder 
+    if (!orderDoc) {
+      orderDoc = new Order({
+        buyerId: buyer._id,
+        buyerEmail: buyer.email,
+        items: [],
+        grandTotal: 0
       });
     }
 
-    // If no existing order, create new one (original code)
     for (const item of products) {
       const { productId, quantity } = item;
-      
+
       if (!productId || !quantity || quantity <= 0) {
-        return res.status(400).json({ message: "Invalid product in order request." });
+        return res.status(400).json({ message: "Invalid product data." });
       }
 
       const productDoc = await Product.findOne({ "products._id": productId });
@@ -211,56 +170,55 @@ export const placeOrder = async (req, res) => {
         return res.status(404).json({ message: `Product with ID ${productId} not found.` });
       }
 
-      if (productDoc.userId.toString() !== buyer._id.toString()) {
-        return res.status(400).json({ 
-          message: "You can only order your own products."
+      // Check if the product belongs to the buyer (email match)
+      if (productDoc.userEmail !== buyer.email) {
+        return res.status(403).json({ 
+          message: `You can only order products that you created. Product ${productId} belongs to another user.` 
         });
       }
 
       const product = productDoc.products.id(productId);
       if (product.productQuantity < quantity) {
-        return res.status(400).json({ 
-          message: `Not enough stock available for ${product.productName}. Available: ${product.productQuantity}`
+        return res.status(400).json({
+          message: `Not enough stock for ${product.productName}. Available: ${product.productQuantity}`
         });
       }
 
-      const itemTotal = product.productPrice * quantity;
-      grandTotal += itemTotal;
-
-      orderItems.push({
-        productId: product._id,
-        productName: product.productName,
-        sellerId: productDoc.userId,
-        sellerEmail: productDoc.userEmail,
-        quantityOrdered: quantity,
-        productPrice: product.productPrice,
-        totalPrice: itemTotal
-      });
-
+      // Deduct stock
       product.productQuantity -= quantity;
       await productDoc.save();
+
+      const existingItem = orderDoc.items.find(
+        i => i.productId.toString() === productId
+      );
+
+      if (existingItem) {
+        existingItem.quantityOrdered += quantity;
+        existingItem.totalPrice = existingItem.quantityOrdered * existingItem.productPrice;
+      } else {
+        orderDoc.items.push({
+          productId: product._id,
+          productName: product.productName,
+          sellerId: productDoc.userId,
+          sellerEmail: productDoc.userEmail,
+          quantityOrdered: quantity,
+          productPrice: product.productPrice,
+          totalPrice: quantity * product.productPrice
+        });
+      }
     }
 
-    const newOrder = new Order({
-      buyerId: buyer._id,
-      buyerEmail: buyer.email,
-      items: orderItems,
-      grandTotal: grandTotal
-    });
+    orderDoc.grandTotal = orderDoc.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const savedOrder = await orderDoc.save();
 
-    const savedOrder = await newOrder.save();
-
-    res.status(200).json({ 
-      message: "Order placed successfully", 
-      order: savedOrder 
+    res.status(200).json({
+      message: "Order placed or updated successfully",
+      order: savedOrder
     });
 
   } catch (error) {
-    console.error("Order placement failed:", error);
-    res.status(500).json({ 
-      message: "Server Error", 
-      error: error.message 
-    });
+    console.error("Order placement error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
 
@@ -277,45 +235,15 @@ export const getAllOrders = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    // Get orders where user is either buyer or seller
+    // Get all orders where user is either buyer or seller
     const orders = await Order.find({
       $or: [
-        { buyerId: user._id }, // Orders where user is the buyer
-        { "items.sellerId": user._id } // Orders where user is the seller
+        { buyerId: user._id },
+        { "items.sellerId": user._id }
       ]
     }).sort({ orderedAt: -1 });
 
-    // Group orders by productId and buyerId
-    const groupedOrders = {};
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        const key = `${item.productId}-${order.buyerId}`;
-        if (!groupedOrders[key]) {
-          groupedOrders[key] = {
-            productId: item.productId,
-            productName: item.productName,
-            buyerId: order.buyerId,
-            buyerEmail: order.buyerEmail,
-            productPrice: item.productPrice,
-            totalQuantity: 0,
-            totalPrice: 0,
-            orders: []
-          };
-        }
-        groupedOrders[key].totalQuantity += item.quantityOrdered;
-        groupedOrders[key].totalPrice += item.totalPrice;
-        groupedOrders[key].orders.push({
-          orderId: order._id,
-          quantity: item.quantityOrdered,
-          price: item.totalPrice,
-          orderedAt: order.orderedAt
-        });
-      });
-    });
-
-    res.status(200).json({
-      groupedOrders: Object.values(groupedOrders)
-    });
+    res.status(200).json(orders);
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
@@ -333,54 +261,75 @@ export const getProductSummary = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    // Get all products for this user
     const productDoc = await Product.findOne({ userId: user._id });
     if (!productDoc) {
       return res.status(200).json({
         products: [],
         totalProductsInStock: 0,
-        totalProductsSold: 0
+        totalProductsSold: 0,
+        totalActualPrice: 0,
+        totalSalesValue: 0,
+        totalProfit: 0
       });
     }
 
-    // Get all orders where this user is the seller
     const orders = await Order.find({ "items.sellerId": user._id });
 
-    // Calculate sold quantities
     const soldQuantities = {};
+    const salesValues = {};
     orders.forEach(order => {
       order.items.forEach(item => {
         if (item.sellerId.toString() === user._id.toString()) {
           const productIdStr = item.productId.toString();
           if (!soldQuantities[productIdStr]) {
             soldQuantities[productIdStr] = 0;
+            salesValues[productIdStr] = 0;
           }
           soldQuantities[productIdStr] += item.quantityOrdered;
+          salesValues[productIdStr] += item.totalPrice;
         }
       });
     });
 
-    // Prepare product summary
+    let totalActualPrice = 0;
+    let totalSalesValue = 0;
+    let totalProfit = 0;
+
     const productSummary = productDoc.products.map(product => {
       const productIdStr = product._id.toString();
       const sold = soldQuantities[productIdStr] || 0;
+      const productSalesValue = salesValues[productIdStr] || 0;
+      const productActualCost = product.actualPrice * sold;
+      const productProfit = productSalesValue - productActualCost;
+      
+      totalActualPrice += product.actualPrice * (product.productQuantity + sold);
+      totalSalesValue += productSalesValue;
+      totalProfit += productProfit;
+
       return {
         productId: product._id,
         productName: product.productName,
         inStock: product.productQuantity,
         sold: sold,
-        total: product.productQuantity + sold
+        total: product.productQuantity + sold,
+        actualPrice: product.actualPrice,
+        sellingPrice: product.productPrice,
+        totalActualCost: product.actualPrice * (product.productQuantity + sold),
+        totalSalesValue: productSalesValue,
+        profit: productProfit
       };
     });
 
-    // Calculate totals
     const totalProductsInStock = productSummary.reduce((sum, product) => sum + product.inStock, 0);
     const totalProductsSold = productSummary.reduce((sum, product) => sum + product.sold, 0);
 
     res.status(200).json({
       products: productSummary,
       totalProductsInStock,
-      totalProductsSold
+      totalProductsSold,
+      totalActualPrice,
+      totalSalesValue,
+      totalProfit
     });
 
   } catch (error) {
