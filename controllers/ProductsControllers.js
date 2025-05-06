@@ -277,37 +277,32 @@ export const getProductSummary = async (req, res) => {
       });
     }
 
-    const orders = await Order.find({ "items.sellerId": user._id });
+    const orders = await Order.find({ userId: user._id });
 
+    // Initialize tracking objects
     const soldQuantities = {};
     const siftingQuantities = {};
     const salesValues = {};
     const siftingValues = {};
 
+    // Process all orders to calculate sold and sifting quantities
     orders.forEach(order => {
       order.items.forEach(item => {
-        if (item.sellerId.toString() === user._id.toString()) {
-          const productIdStr = item.productId.toString();
-          
-          if (item.status === 'sifted') {
-            if (!soldQuantities[productIdStr]) {
-              soldQuantities[productIdStr] = 0;
-              salesValues[productIdStr] = 0;
-            }
-            soldQuantities[productIdStr] += item.quantityOrdered;
-            salesValues[productIdStr] += item.totalPrice;
-          } else if (item.status === 'sifting') {
-            if (!siftingQuantities[productIdStr]) {
-              siftingQuantities[productIdStr] = 0;
-              siftingValues[productIdStr] = 0;
-            }
-            siftingQuantities[productIdStr] += item.quantityOrdered;
-            siftingValues[productIdStr] += item.totalPrice;
-          }
+        const productIdStr = item.productId.toString();
+        
+        if (item.status === 'sifted') {
+          soldQuantities[productIdStr] = (soldQuantities[productIdStr] || 0) + item.quantityOrdered;
+          salesValues[productIdStr] = (salesValues[productIdStr] || 0) + item.totalPrice;
+        } else if (item.status === 'sifting') {
+          siftingQuantities[productIdStr] = (siftingQuantities[productIdStr] || 0) + item.quantityOrdered;
+          siftingValues[productIdStr] = (siftingValues[productIdStr] || 0) + item.totalPrice;
         }
       });
     });
 
+    let totalProductsInStock = 0;
+    let totalProductsSold = 0;
+    let totalProductsSifting = 0;
     let totalActualPrice = 0;
     let totalSalesValue = 0;
     let totalSiftingValue = 0;
@@ -317,12 +312,19 @@ export const getProductSummary = async (req, res) => {
       const productIdStr = product._id.toString();
       const sold = soldQuantities[productIdStr] || 0;
       const sifting = siftingQuantities[productIdStr] || 0;
+      const inStock = product.productQuantity;
+      const totalQuantity = inStock + sold + sifting;
+      
       const productSalesValue = salesValues[productIdStr] || 0;
       const productSiftingValue = siftingValues[productIdStr] || 0;
       const productActualCost = product.actualPrice * sold;
       const productProfit = productSalesValue - productActualCost;
-      
-      totalActualPrice += product.actualPrice * (product.productQuantity + sold + sifting);
+
+      // Update totals
+      totalProductsInStock += inStock;
+      totalProductsSold += sold;
+      totalProductsSifting += sifting;
+      totalActualPrice += product.actualPrice * totalQuantity;
       totalSalesValue += productSalesValue;
       totalSiftingValue += productSiftingValue;
       totalProfit += productProfit;
@@ -330,22 +332,18 @@ export const getProductSummary = async (req, res) => {
       return {
         productId: product._id,
         productName: product.productName,
-        inStock: product.productQuantity,
+        inStock: inStock,
         sold: sold,
         sifting: sifting,
-        total: product.productQuantity + sold + sifting,
+        total: totalQuantity,
         actualPrice: product.actualPrice,
         sellingPrice: product.productPrice,
-        totalActualCost: product.actualPrice * (product.productQuantity + sold + sifting),
+        totalActualCost: product.actualPrice * totalQuantity,
         totalSalesValue: productSalesValue,
         totalSiftingValue: productSiftingValue,
         profit: productProfit
       };
     });
-
-    const totalProductsInStock = productSummary.reduce((sum, product) => sum + product.inStock, 0);
-    const totalProductsSold = productSummary.reduce((sum, product) => sum + product.sold, 0);
-    const totalProductsSifting = productSummary.reduce((sum, product) => sum + product.sifting, 0);
 
     res.status(200).json({
       products: productSummary,
