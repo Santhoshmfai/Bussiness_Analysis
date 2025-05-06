@@ -390,3 +390,53 @@ export const getProductSummary = async (req, res) => {
     });
   }
 };
+export const addSameProduct = async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized: No token provided." });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const { productId, additionalQuantity } = req.body;
+
+    if (!productId || !additionalQuantity || additionalQuantity <= 0) {
+      return res.status(400).json({ message: "Product ID and valid additional quantity are required" });
+    }
+
+    // Find the product document for this user
+    const productDoc = await Product.findOne({ userId: user._id });
+    if (!productDoc) {
+      return res.status(404).json({ message: "No products found for this user." });
+    }
+
+    // Find the specific product in the products array
+    const productIndex = productDoc.products.findIndex(
+      p => p._id.toString() === productId
+    );
+
+    if (productIndex === -1) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    // Update the product quantity
+    productDoc.products[productIndex].productQuantity += additionalQuantity;
+
+    const updatedProduct = await productDoc.save();
+    
+    res.status(200).json({
+      message: "Product quantity updated successfully",
+      product: updatedProduct.products[productIndex]
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: error.message 
+    });
+  }
+}
