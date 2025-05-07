@@ -188,24 +188,15 @@ export const placeOrder = async (req, res) => {
       // Deduct stock
       product.productQuantity -= quantity;
       
-      const existingItem = orderDoc.items.find(
-        i => i.productId.toString() === productId
-      );
-
-      if (existingItem) {
-        existingItem.quantityOrdered += quantity;
-        existingItem.totalPrice = existingItem.quantityOrdered * existingItem.productPrice;
-        existingItem.status = status;
-      } else {
-        orderDoc.items.push({
-          productId: product._id,
-          productName: product.productName,
-          quantityOrdered: quantity,
-          productPrice: product.productPrice,
-          totalPrice: quantity * product.productPrice,
-          status: status
-        });
-      }
+      // Create a new order item (don't merge with existing ones)
+      orderDoc.items.push({
+        productId: product._id,
+        productName: product.productName,
+        quantityOrdered: quantity,
+        productPrice: product.productPrice,
+        totalPrice: quantity * product.productPrice,
+        status: status
+      });
     }
 
     // Save product quantity changes
@@ -215,7 +206,7 @@ export const placeOrder = async (req, res) => {
     const savedOrder = await orderDoc.save();
 
     res.status(200).json({
-      message: "Order placed or updated successfully",
+      message: "Order placed successfully",
       order: savedOrder
     });
 
