@@ -279,26 +279,24 @@ export const getProductSummary = async (req, res) => {
 
     const orders = await Order.find({ userId: user._id });
 
-    // Initialize tracking objects
-    const soldQuantities = {};
-    const siftingQuantities = {};
-    const salesValues = {};
-    const siftingValues = {};
+    // Use maps for accuracy
+    const soldMap = new Map();
+    const siftingMap = new Map();
+    const salesValues = new Map();
+    const siftingValues = new Map();
 
-    // Process all orders to calculate sold and sifting quantities
-    orders.forEach(order => {
-      order.items.forEach(item => {
+    for (const order of orders) {
+      for (const item of order.items) {
         const productIdStr = item.productId.toString();
-        
         if (item.status === 'sifted') {
-          soldQuantities[productIdStr] = (soldQuantities[productIdStr] || 0) + item.quantityOrdered;
-          salesValues[productIdStr] = (salesValues[productIdStr] || 0) + item.totalPrice;
+          soldMap.set(productIdStr, (soldMap.get(productIdStr) || 0) + item.quantityOrdered);
+          salesValues.set(productIdStr, (salesValues.get(productIdStr) || 0) + item.totalPrice);
         } else if (item.status === 'sifting') {
-          siftingQuantities[productIdStr] = (siftingQuantities[productIdStr] || 0) + item.quantityOrdered;
-          siftingValues[productIdStr] = (siftingValues[productIdStr] || 0) + item.totalPrice;
+          siftingMap.set(productIdStr, (siftingMap.get(productIdStr) || 0) + item.quantityOrdered);
+          siftingValues.set(productIdStr, (siftingValues.get(productIdStr) || 0) + item.totalPrice);
         }
-      });
-    });
+      }
+    }
 
     let totalProductsInStock = 0;
     let totalProductsSold = 0;
@@ -310,38 +308,37 @@ export const getProductSummary = async (req, res) => {
 
     const productSummary = productDoc.products.map(product => {
       const productIdStr = product._id.toString();
-      const sold = soldQuantities[productIdStr] || 0;
-      const sifting = siftingQuantities[productIdStr] || 0;
+      const sold = soldMap.get(productIdStr) || 0;
+      const sifting = siftingMap.get(productIdStr) || 0;
       const inStock = product.productQuantity;
       const totalQuantity = inStock + sold + sifting;
-      
-      const productSalesValue = salesValues[productIdStr] || 0;
-      const productSiftingValue = siftingValues[productIdStr] || 0;
-      const productActualCost = product.actualPrice * sold;
-      const productProfit = productSalesValue - productActualCost;
 
-      // Update totals
+      const sales = salesValues.get(productIdStr) || 0;
+      const siftingVal = siftingValues.get(productIdStr) || 0;
+      const actualCost = product.actualPrice * totalQuantity;
+      const profit = sales - (product.actualPrice * sold);
+
       totalProductsInStock += inStock;
       totalProductsSold += sold;
       totalProductsSifting += sifting;
-      totalActualPrice += product.actualPrice * totalQuantity;
-      totalSalesValue += productSalesValue;
-      totalSiftingValue += productSiftingValue;
-      totalProfit += productProfit;
+      totalActualPrice += actualCost;
+      totalSalesValue += sales;
+      totalSiftingValue += siftingVal;
+      totalProfit += profit;
 
       return {
         productId: product._id,
         productName: product.productName,
-        inStock: inStock,
-        sold: sold,
-        sifting: sifting,
+        inStock,
+        sold,
+        sifting,
         total: totalQuantity,
         actualPrice: product.actualPrice,
         sellingPrice: product.productPrice,
-        totalActualCost: product.actualPrice * totalQuantity,
-        totalSalesValue: productSalesValue,
-        totalSiftingValue: productSiftingValue,
-        profit: productProfit
+        totalActualCost: actualCost,
+        totalSalesValue: sales,
+        totalSiftingValue: siftingVal,
+        profit
       };
     });
 
@@ -426,7 +423,7 @@ export const completeSifting = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const { orderId, itemId } = req.body;
+    const { orderId, itemId, quantity } = req.body;
 
     if (!orderId || !itemId) {
       return res.status(400).json({ message: "Order ID and Item ID are required." });
@@ -434,7 +431,7 @@ export const completeSifting = async (req, res) => {
 
     const order = await Order.findOne({
       _id: orderId,
-      userId: user._id, // Ensure only the owner can modify their order
+      userId: user._id,
       "items._id": itemId
     });
 
@@ -447,7 +444,34 @@ export const completeSifting = async (req, res) => {
       return res.status(400).json({ message: "Item is not in sifting status." });
     }
 
-    item.status = 'sifted';
+    // If quantity is provided, only mark that quantity as sifted
+    if (quantity && quantity > 0) {
+      if (quantity > item.quantityOrdered) {
+        return res.status(400).json({ message: "Quantity cannot exceed the sifting quantity." });
+      }
+
+      // Create a new sifted item with the completed quantity
+      order.items.push({
+        productId: item.productId,
+        productName: item.productName,
+        quantityOrdered: quantity,
+        productPrice: item.productPrice,
+        totalPrice: quantity * item.productPrice,
+        status: 'sifted'
+      });
+
+      // Reduce the original sifting item's quantity
+      item.quantityOrdered -= quantity;
+      
+      // If no quantity left, remove the sifting item
+      if (item.quantityOrdered <= 0) {
+        order.items.pull(item._id);
+      }
+    } else {
+      // If no quantity specified, mark the entire item as sifted
+      item.status = 'sifted';
+    }
+
     await order.save();
 
     res.status(200).json({
