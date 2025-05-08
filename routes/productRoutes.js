@@ -1,5 +1,6 @@
 import express from "express";
-import { createProduct ,getAllProducts,placeOrder,getAllOrders,getProductSummary ,signup ,login ,addSameProduct ,completeSifting ,searchOrderedProduct ,searchProductById ,getSiftingProducts,getSiftedProducts} from "../controllers/ProductsControllers.js";
+import { createProduct ,getAllProducts,placeOrder,getAllOrders,getProductSummary ,signup ,login ,addSameProduct ,completeSifting ,searchOrderedProduct ,searchProductById ,
+    getSiftingProducts,getSiftedProducts ,getSingleItems ,getGroupItems} from "../controllers/ProductsControllers.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -24,5 +25,8 @@ router.get("/search-orders/:orderId/items/:itemId", verifyToken, searchOrderedPr
 
 router.get("/SiftingProduct", verifyToken, getSiftingProducts);
 router.get("/SiftedProducts", verifyToken, getSiftedProducts);
+
+router.get("/getOnlySingleItems", verifyToken, getSingleItems);
+router.get("/getOnlyGroupItems", verifyToken, getGroupItems);
 
 export default router;

@@ -617,14 +617,12 @@ export const getSiftedProducts = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
-
-    // Find all orders for this user that have items with 'sifted' status
     const orders = await Order.find({ 
       userId: user._id,
       'items.status': 'sifted'
     });
 
-    // Extract only the sifted items from all orders
+ 
     const siftedItems = orders.flatMap(order => 
       order.items.filter(item => item.status === 'sifted')
     );
@@ -635,5 +633,64 @@ export const getSiftedProducts = async (req, res) => {
       message: "Server Error", 
       error: error.message 
     });
+  }
+};
+
+export const getSingleItems = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized: No token provided." });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const productDoc = await Product.findOne({ userId: user._id });
+    
+    if (!productDoc) {
+      return res.status(200).json([]);
+    }
+    
+    const singleItems = productDoc.products.filter(
+      product => product.itemType === 'singleitem'
+    );
+    
+    res.status(200).json(singleItems);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+// Get only groupitem products
+export const getGroupItems = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized: No token provided." });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const productDoc = await Product.findOne({ userId: user._id });
+    
+    if (!productDoc) {
+      return res.status(200).json([]);
+    }
+    
+    const groupItems = productDoc.products.filter(
+      product => product.itemType === 'groupitems'
+    );
+    
+    res.status(200).json(groupItems);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
