@@ -228,15 +228,28 @@ export const getAllOrders = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    // Get all orders where user is either buyer or seller
-    const orders = await Order.find({
-      $or: [
-        { buyerId: user._id },
-        { "items.sellerId": user._id }
-      ]
-    }).sort({ orderedAt: -1 });
+    // Get all orders where user is the owner (userId matches)
+    const orders = await Order.find({ userId: user._id })
+      .sort({ orderedAt: -1 });
 
-    res.status(200).json(orders);
+    // Separate items into sifting and sifted
+    const formattedOrders = orders.map(order => {
+      const siftingItems = order.items.filter(item => item.status === 'sifting');
+      const siftedItems = order.items.filter(item => item.status === 'sifted');
+      
+      return {
+        _id: order._id,
+        userId: order.userId,
+        userEmail: order.userEmail,
+        siftingItems,
+        siftedItems,
+        grandTotal: order.grandTotal,
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt
+      };
+    });
+
+    res.status(200).json(formattedOrders);
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
