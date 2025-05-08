@@ -35,7 +35,6 @@ export const signup = async (req, res) => {
       res.status(500).json({ error: "Internal server error" });
   }
 };
-
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -551,6 +550,73 @@ export const searchOrderedProduct = async (req, res) => {
     }
 
     res.status(200).json(item);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: error.message 
+    });
+  }
+};
+// Get only sifting products (orders with status 'sifting')
+export const getSiftingProducts = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized: No token provided." });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Find all orders for this user that have items with 'sifting' status
+    const orders = await Order.find({ 
+      userId: user._id,
+      'items.status': 'sifting'
+    });
+
+    // Extract only the sifting items from all orders
+    const siftingItems = orders.flatMap(order => 
+      order.items.filter(item => item.status === 'sifting')
+    );
+
+    res.status(200).json(siftingItems);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: error.message 
+    });
+  }
+};
+
+// Get only sifted products (orders with status 'sifted')
+export const getSiftedProducts = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized: No token provided." });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Find all orders for this user that have items with 'sifted' status
+    const orders = await Order.find({ 
+      userId: user._id,
+      'items.status': 'sifted'
+    });
+
+    // Extract only the sifted items from all orders
+    const siftedItems = orders.flatMap(order => 
+      order.items.filter(item => item.status === 'sifted')
+    );
+
+    res.status(200).json(siftedItems);
   } catch (error) {
     res.status(500).json({ 
       message: "Server Error", 

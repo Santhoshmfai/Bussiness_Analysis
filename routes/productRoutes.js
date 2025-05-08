@@ -1,5 +1,5 @@
 import express from "express";
-import { createProduct ,getAllProducts,placeOrder,getAllOrders,getProductSummary ,signup ,login ,addSameProduct ,completeSifting ,searchOrderedProduct ,searchProductById} from "../controllers/ProductsControllers.js";
+import { createProduct ,getAllProducts,placeOrder,getAllOrders,getProductSummary ,signup ,login ,addSameProduct ,completeSifting ,searchOrderedProduct ,searchProductById ,getSiftingProducts,getSiftedProducts} from "../controllers/ProductsControllers.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -21,5 +21,8 @@ router.post("/completeSifted",verifyToken,  completeSifting );
 
 router.get("/search-products/:productId", verifyToken, searchProductById);
 router.get("/search-orders/:orderId/items/:itemId", verifyToken, searchOrderedProduct);
+
+router.get("/SiftingProduct", verifyToken, getSiftingProducts);
+router.get("/SiftedProducts", verifyToken, getSiftedProducts);
 
 export default router;
