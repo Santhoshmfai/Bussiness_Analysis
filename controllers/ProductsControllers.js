@@ -58,6 +58,7 @@ export const login = async (req, res) => {
       res.status(500).json({ error: "Server error", details: error.message });
   }
 };
+
 export const createProduct = async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
@@ -470,6 +471,86 @@ export const completeSifting = async (req, res) => {
       order: order
     });
 
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: error.message 
+    });
+  }
+};
+
+// Search a product in user's inventory by product ID
+export const searchProductById = async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized: No token provided." });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const { productId } = req.params;
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required." });
+    }
+
+    const productDoc = await Product.findOne({ userId: user._id });
+    if (!productDoc) {
+      return res.status(404).json({ message: "No products found for this user." });
+    }
+
+    const product = productDoc.products.id(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found in your inventory." });
+    }
+
+    res.status(200).json(product);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: error.message 
+    });
+  }
+};
+
+// Search an ordered product by order ID and item ID
+export const searchOrderedProduct = async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized: No token provided." });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const { orderId, itemId } = req.params;
+    if (!orderId || !itemId) {
+      return res.status(400).json({ message: "Both Order ID and Item ID are required." });
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: user._id
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found for this user." });
+    }
+
+    const item = order.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Item not found in this order." });
+    }
+
+    res.status(200).json(item);
   } catch (error) {
     res.status(500).json({ 
       message: "Server Error", 
