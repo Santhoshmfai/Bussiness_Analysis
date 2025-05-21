@@ -1,0 +1,613 @@
+openapi: 3.0.0
+info:
+  title: Inventory Management API
+  description: API for managing products, orders, and user authentication
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000/api
+    description: Development server
+tags:
+  - name: Authentication
+    description: User signup and login
+  - name: Products
+    description: Product management
+  - name: Orders
+    description: Order management
+  - name: Reports
+    description: Inventory reports and summaries
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        businessName:
+          type: string
+        email:
+          type: string
+          format: email
+        businessType:
+          type: string
+    Product:
+      type: object
+      properties:
+        productName:
+          type: string
+        productPrice:
+          type: number
+        actualPrice:
+          type: number
+        productQuantity:
+          type: number
+        type:
+          type: string
+        itemType:
+          type: string
+          enum: [singleitem, groupitems]
+        category:
+          type: string
+        productImage:
+          type: string
+    OrderItem:
+      type: object
+      properties:
+        productId:
+          type: string
+        productName:
+          type: string
+        quantityOrdered:
+          type: number
+        productPrice:
+          type: number
+        totalPrice:
+          type: number
+        status:
+          type: string
+          enum: [sifting, sifted]
+    Order:
+      type: object
+      properties:
+        userId:
+          type: string
+        userEmail:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        grandTotal:
+          type: number
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+    ProductSummary:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              productId:
+                type: string
+              productName:
+                type: string
+              inStock:
+                type: number
+              sold:
+                type: number
+              sifting:
+                type: number
+              total:
+                type: number
+              actualPrice:
+                type: number
+              sellingPrice:
+                type: number
+              totalActualCost:
+                type: number
+              totalSalesValue:
+                type: number
+              totalSiftingValue:
+                type: number
+              profit:
+                type: number
+        totalProductsInStock:
+          type: number
+        totalProductsSold:
+          type: number
+        totalProductsSifting:
+          type: number
+        totalActualPrice:
+          type: number
+        totalSalesValue:
+          type: number
+        totalSiftingValue:
+          type: number
+        totalProfit:
+          type: number
+
+paths:
+  /signup:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                businessName:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                businessType:
+                  type: string
+              required:
+                - businessName
+                - email
+                - password
+                - businessType
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  token:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /login:
+    post:
+      tags: [Authentication]
+      summary: Login a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required:
+                - email
+                - password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  token:
+                    type: string
+                  email:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /CreateProducts:
+    post:
+      tags: [Products]
+      summary: Create a new product
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /GetAllProducts:
+    get:
+      tags: [Products]
+      summary: Get all products
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /getOnlySingleItems:
+    get:
+      tags: [Products]
+      summary: Get all single items
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of single items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /getOnlyGroupItems:
+    get:
+      tags: [Products]
+      summary: Get all group items
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of group items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /search-products/{productId}:
+    get:
+      tags: [Products]
+      summary: Search a product by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Product not found
+        '500':
+          description: Server error
+
+  /addSameProduct:
+    post:
+      tags: [Products]
+      summary: Add quantity to existing product
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                productId:
+                  type: string
+                additionalQuantity:
+                  type: number
+              required:
+                - productId
+                - additionalQuantity
+      responses:
+        '200':
+          description: Quantity updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  product:
+                    $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Product not found
+        '500':
+          description: Server error
+
+  /OrderItem:
+    post:
+      tags: [Orders]
+      summary: Place a new order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: number
+                      status:
+                        type: string
+                        enum: [sifting, sifted]
+      responses:
+        '200':
+          description: Order placed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  order:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: User or product not found
+        '500':
+          description: Server error
+
+  /getAllOrders:
+    get:
+      tags: [Orders]
+      summary: Get all orders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    _id:
+                      type: string
+                    userId:
+                      type: string
+                    userEmail:
+                      type: string
+                    siftingItems:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/OrderItem'
+                    siftedItems:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/OrderItem'
+                    grandTotal:
+                      type: number
+                    createdAt:
+                      type: string
+                      format: date-time
+                    updatedAt:
+                      type: string
+                      format: date-time
+        '401':
+          description: Unauthorized
+        '404':
+          description: User not found
+        '500':
+          description: Server error
+
+  /SiftingProduct:
+    get:
+      tags: [Orders]
+      summary: Get all sifting items
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of sifting items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderItem'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /SiftedProducts:
+    get:
+      tags: [Orders]
+      summary: Get all sifted items
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of sifted items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderItem'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /search-orders/{orderId}/items/{itemId}:
+    get:
+      tags: [Orders]
+      summary: Search an ordered product by order ID and item ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: itemId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Order or item not found
+        '500':
+          description: Server error
+
+  /completeSifted:
+    post:
+      tags: [Orders]
+      summary: Mark sifting as complete
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                itemId:
+                  type: string
+                quantity:
+                  type: number
+              required:
+                - orderId
+                - itemId
+      responses:
+        '200':
+          description: Sifting completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  order:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Order or item not found
+        '500':
+          description: Server error
+
+  /getSummary:
+    get:
+      tags: [Reports]
+      summary: Get product summary report
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Product summary report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductSummary'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
