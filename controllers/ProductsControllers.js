@@ -35,6 +35,7 @@ export const signup = async (req, res) => {
       res.status(500).json({ error: "Internal server error" });
   }
 };
+
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -59,14 +60,8 @@ export const login = async (req, res) => {
 };
 
 export const createProduct = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided." });
-  }
-  
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -103,16 +98,11 @@ export const createProduct = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
-}
+};
+
 export const getAllProducts = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ error: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -129,15 +119,10 @@ export const getAllProducts = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
-export const placeOrder = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided." });
-  }
 
+export const placeOrder = async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -215,15 +200,10 @@ export const placeOrder = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
+
 export const getAllOrders = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -254,15 +234,10 @@ export const getAllOrders = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
+
 export const getProductSummary = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ error: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -364,15 +339,10 @@ export const getProductSummary = async (req, res) => {
     });
   }
 };
+
 export const addSameProduct = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided." });
-  }
-  
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -413,16 +383,11 @@ export const addSameProduct = async (req, res) => {
       error: error.message 
     });
   }
-}
-export const completeSifting = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided." });
-  }
+};
 
+export const completeSifting = async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -493,14 +458,8 @@ export const completeSifting = async (req, res) => {
 
 // Search a product in user's inventory by product ID
 export const searchProductById = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided." });
-  }
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -531,14 +490,8 @@ export const searchProductById = async (req, res) => {
 
 // Search an ordered product by order ID and item ID
 export const searchOrderedProduct = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided." });
-  }
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -570,16 +523,11 @@ export const searchOrderedProduct = async (req, res) => {
     });
   }
 };
+
 // Get only sifting products (orders with status 'sifting')
 export const getSiftingProducts = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -607,13 +555,7 @@ export const getSiftingProducts = async (req, res) => {
 // Get only sifted products (orders with status 'sifted')
 export const getSiftedProducts = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -622,7 +564,6 @@ export const getSiftedProducts = async (req, res) => {
       'items.status': 'sifted'
     });
 
- 
     const siftedItems = orders.flatMap(order => 
       order.items.filter(item => item.status === 'sifted')
     );
@@ -638,13 +579,7 @@ export const getSiftedProducts = async (req, res) => {
 
 export const getSingleItems = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ error: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -668,13 +603,7 @@ export const getSingleItems = async (req, res) => {
 // Get only groupitem products
 export const getGroupItems = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ error: "Unauthorized: No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
