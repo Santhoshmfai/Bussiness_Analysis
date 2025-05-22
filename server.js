@@ -19,6 +19,11 @@ app.use("/api", productRoutes);
 // Connect to MongoDB
 connectDB();
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "OK" });
+});
+
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
